@@ -8,7 +8,8 @@ import 'package:video_player/video_player.dart';
 abstract interface class VideoControllerFactory {
   Future<VideoPlayerController> create(String url);
 
-  void prefetch(String url);
+  // the clips just ahead of the viewer; each call replaces the last list
+  void prefetch(List<String> urls);
 }
 
 class CachedVideoControllerFactory implements VideoControllerFactory {
@@ -22,7 +23,12 @@ class CachedVideoControllerFactory implements VideoControllerFactory {
   final BaseCacheManager _cache;
   final VideoPlayerController Function(Uri url) _stream;
   final VideoPlayerController Function(File file) _local;
-  final Set<String> _prefetching = {};
+  final Set<String> _downloading = {};
+
+  // a download can't be stopped once it starts, so warm clips go one at a
+  // time and a flick past them drops the ones still waiting
+  final List<String> _warmQueue = [];
+  bool _warming = false;
 
   // play from disk when we already have the file, otherwise stream so the
   // first frame doesn't wait for the whole mp4 to download
@@ -40,14 +46,24 @@ class CachedVideoControllerFactory implements VideoControllerFactory {
     final streaming = await _initialize(_stream(Uri.parse(url)));
     // keep a copy for the next visit, fetched only once the stream is up so
     // it never competes with the first frame for bandwidth
-    prefetch(url);
+    unawaited(_download(url));
     return streaming;
   }
 
   @override
-  void prefetch(String url) {
-    if (!_prefetching.add(url)) return;
-    unawaited(_download(url));
+  void prefetch(List<String> urls) {
+    _warmQueue
+      ..clear()
+      ..addAll(urls);
+    unawaited(_warmNext());
+  }
+
+  Future<void> _warmNext() async {
+    if (_warming || _warmQueue.isEmpty) return;
+    _warming = true;
+    await _download(_warmQueue.removeAt(0));
+    _warming = false;
+    await _warmNext();
   }
 
   Future<VideoPlayerController> _initialize(
@@ -63,6 +79,7 @@ class CachedVideoControllerFactory implements VideoControllerFactory {
   }
 
   Future<void> _download(String url) async {
+    if (!_downloading.add(url)) return;
     try {
       if (await _cache.getFileFromCache(url) == null) {
         await _cache.downloadFile(url);
@@ -70,7 +87,7 @@ class CachedVideoControllerFactory implements VideoControllerFactory {
     } on Object catch (e) {
       AppLogger.logWarning('prefetch failed $url: $e');
     } finally {
-      _prefetching.remove(url);
+      _downloading.remove(url);
     }
   }
 }

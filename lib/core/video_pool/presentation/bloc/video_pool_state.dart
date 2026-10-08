@@ -10,6 +10,7 @@ class VideoPoolState extends BaseState {
     this.backgrounded = false,
     this.held = false,
     this.volume = 1,
+    this.muted = false,
     this.hasStarted = false,
   });
 
@@ -23,12 +24,16 @@ class VideoPoolState extends BaseState {
   final bool held;
   final double volume;
 
+  // only used while following the phone's volume: the app goes quiet but the
+  // phone's level, which other apps share, is left alone
+  final bool muted;
+
   // flips once the first active video is ready, drives the startup screen
   final bool hasStarted;
 
   bool get shouldPlay => !userPaused && !backgrounded && !held;
 
-  bool get isMuted => volume == 0;
+  bool get isMuted => muted || volume == 0;
 
   VideoPoolState copyWith({
     Map<int, VideoPlayerController>? controllers,
@@ -39,6 +44,7 @@ class VideoPoolState extends BaseState {
     bool? backgrounded,
     bool? held,
     double? volume,
+    bool? muted,
     bool? hasStarted,
   }) {
     return VideoPoolState(
@@ -50,6 +56,7 @@ class VideoPoolState extends BaseState {
       backgrounded: backgrounded ?? this.backgrounded,
       held: held ?? this.held,
       volume: volume ?? this.volume,
+      muted: muted ?? this.muted,
       hasStarted: hasStarted ?? this.hasStarted,
     );
   }
@@ -64,6 +71,7 @@ class VideoPoolState extends BaseState {
         backgrounded,
         held,
         volume,
+        muted,
         hasStarted,
       ];
 }

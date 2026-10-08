@@ -90,6 +90,69 @@ void main() {
     saving.complete(await onDisk('ep1'));
   });
 
+  test('warm clips download one at a time and a newer window replaces the wait',
+      () async {
+    final first = Completer<FileInfo>();
+    when(() => cache.downloadFile('w1')).thenAnswer((_) {
+      events.add('save w1');
+      return first.future;
+    });
+
+    final factory = build()..prefetch(['w1', 'w2']);
+    await pumpEventQueue();
+    expect(events, ['save w1']);
+
+    // the viewer flicked on before w1 landed; w2 is no longer ahead of them
+    factory.prefetch(['w3', 'w4']);
+    await pumpEventQueue();
+    expect(events, ['save w1']);
+
+    first.complete(await onDisk('w1'));
+    await pumpEventQueue();
+    expect(events, ['save w1', 'save w3', 'save w4']);
+  });
+
+  test('a warm download that fails does not stall the ones behind it',
+      () async {
+    when(() => cache.downloadFile('w1')).thenThrow(Exception('offline'));
+
+    build().prefetch(['w1', 'w2']);
+    await pumpEventQueue();
+    expect(events, ['save w2']);
+  });
+
+  test('a clip already being saved after its stream is not fetched twice',
+      () async {
+    final saving = Completer<FileInfo>();
+    when(() => cache.downloadFile('ep1')).thenAnswer((_) {
+      events.add('save ep1');
+      return saving.future;
+    });
+
+    final factory = build();
+    await factory.create('ep1');
+    factory.prefetch(['ep1']);
+    await pumpEventQueue();
+    expect(events.where((e) => e == 'save ep1'), hasLength(1));
+
+    saving.complete(await onDisk('ep1'));
+  });
+
+  test('an empty window drops whatever was still waiting', () async {
+    final first = Completer<FileInfo>();
+    when(() => cache.downloadFile('w1')).thenAnswer((_) {
+      events.add('save w1');
+      return first.future;
+    });
+
+    final factory = build()..prefetch(['w1', 'w2']);
+    await pumpEventQueue();
+    factory.prefetch([]);
+    first.complete(await onDisk('w1'));
+    await pumpEventQueue();
+    expect(events, ['save w1']);
+  });
+
   test('a stream that never starts is not saved', () async {
     await expectLater(build(deadStream: true).create('ep1'), throwsException);
     await pumpEventQueue();

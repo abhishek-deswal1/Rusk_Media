@@ -64,7 +64,7 @@ class FakeVideoController extends VideoPlayerController {
 // every create() waits until the test completes or fails it
 class FakeControllerFactory implements VideoControllerFactory {
   final List<(String, Completer<VideoPlayerController>)> requests = [];
-  final List<String> prefetched = [];
+  final List<List<String>> prefetched = [];
 
   List<String> get requestedUrls => [for (final (url, _) in requests) url];
 
@@ -76,7 +76,7 @@ class FakeControllerFactory implements VideoControllerFactory {
   }
 
   @override
-  void prefetch(String url) => prefetched.add(url);
+  void prefetch(List<String> urls) => prefetched.add(urls);
 
   FakeVideoController complete(int index) {
     final (url, completer) = requests[index];
