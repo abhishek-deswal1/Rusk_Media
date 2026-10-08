@@ -272,10 +272,7 @@ class _ReelViewState extends State<ReelView> {
                   Duration.zero,
             ),
           ),
-          _WhenFocused(
-            focused: focused,
-            child: PaywallLayer(episode: widget.slot),
-          ),
+          PaywallLayer(episode: widget.slot, focused: focused),
           _WhenFocused(
             focused: focused,
             child: BlocSelector<OnboardingBloc, OnboardingState, bool>(

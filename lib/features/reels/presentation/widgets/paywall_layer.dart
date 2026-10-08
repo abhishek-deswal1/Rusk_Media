@@ -10,23 +10,27 @@ import 'package:rusk_media/core/theme/app_text_styles.dart';
 import 'package:rusk_media/core/ui/components/custom_text.dart';
 import 'package:rusk_media/features/reels/presentation/bloc/paywall_bloc.dart';
 
-// mounted on the focused reel only, so every visit to the locked episode
-// plays the entrance again
+// stays mounted on the locked reel while it scrolls, so swiping away plays
+// the leave instead of cutting the blur off mid-gesture; every visit plays
+// the entrance again
 class PaywallLayer extends StatelessWidget {
-  const PaywallLayer({required this.episode, super.key});
+  const PaywallLayer({required this.episode, required this.focused, super.key});
 
   // catalogue index of the reel underneath
   final int episode;
+  final bool focused;
 
   @override
   Widget build(BuildContext context) {
-    return BlocSelector<PaywallBloc, PaywallState, bool>(
-      selector: (s) => s.showsOn(episode),
-      builder: (context, visible) => Paywall(
-        visible: visible,
-        onUnlock: () =>
-            context.read<PaywallBloc>().add(const PaywallUnlocked()),
-      ),
+    if (!PaywallState.policy.isLockedEpisode(episode)) {
+      return const SizedBox.shrink();
+    }
+    final locked = context.select<PaywallBloc, bool>(
+      (bloc) => bloc.state.showsOn(episode),
+    );
+    return Paywall(
+      visible: focused && locked,
+      onUnlock: () => context.read<PaywallBloc>().add(const PaywallUnlocked()),
     );
   }
 }
@@ -37,7 +41,8 @@ class Paywall extends StatefulWidget {
   final bool visible;
   final VoidCallback onUnlock;
 
-  // stands in for the purchase round trip
+  // the brief asks for a simulated unlock; this delay stands in for the
+  // purchase round trip
   static const Duration unlockDelay = Duration(milliseconds: 600);
 
   @override

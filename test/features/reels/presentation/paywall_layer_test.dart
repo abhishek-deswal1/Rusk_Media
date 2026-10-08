@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:rusk_media/core/constants/app_strings.dart';
+import 'package:rusk_media/features/reels/presentation/bloc/paywall_bloc.dart';
 import 'package:rusk_media/features/reels/presentation/widgets/paywall_layer.dart';
 
 void main() {
@@ -29,6 +31,76 @@ void main() {
     // fonts can't load in tests; not what this checks
     tester.takeException();
   }
+
+  group('on the feed', () {
+    late PaywallBloc paywall;
+
+    setUp(() => paywall = PaywallBloc());
+    tearDown(() => paywall.close());
+
+    Future<void> pumpLayer(
+      WidgetTester tester, {
+      required int episode,
+      required bool focused,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BlocProvider.value(
+              value: paywall,
+              child: PaywallLayer(episode: episode, focused: focused),
+            ),
+          ),
+        ),
+      );
+      tester.takeException();
+    }
+
+    testWidgets('swiping off the locked reel plays the leave, no cut',
+        (tester) async {
+      await pumpLayer(tester, episode: 6, focused: true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(title, findsOneWidget);
+
+      // focus moves at the half-page point while the page is still on screen
+      await pumpLayer(tester, episode: 6, focused: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(title, findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(title, findsNothing);
+
+      // and the next visit comes in again
+      await pumpLayer(tester, episode: 6, focused: true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(title, findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('only the locked episode ever builds a paywall',
+        (tester) async {
+      await pumpLayer(tester, episode: 5, focused: true);
+      expect(find.byType(Paywall), findsNothing);
+      await pumpLayer(tester, episode: 7, focused: true);
+      expect(find.byType(Paywall), findsNothing);
+    });
+
+    testWidgets('unlocking takes it away while still focused', (tester) async {
+      await pumpLayer(tester, episode: 6, focused: true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(title, findsOneWidget);
+
+      // the bloc lives outside the test's fake clock
+      await tester.runAsync(() async {
+        paywall.add(const PaywallUnlocked());
+        await pumpEventQueue();
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(title, findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
 
   testWidgets('comes in over a live blur and bounces past its rest spot',
       (tester) async {

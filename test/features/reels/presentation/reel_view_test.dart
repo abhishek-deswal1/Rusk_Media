@@ -273,7 +273,7 @@ void main() {
     when(() => reels.state).thenReturn(locked.copyWith(focusedPage: 7));
     await pumpEpisode(6);
     expect(find.byType(ReelSurface), findsNothing);
-    expect(find.byType(Paywall), findsNothing);
+    expect(find.text(AppStrings.unlockTitle), findsNothing);
 
     when(() => paywall.state).thenReturn(const PaywallState(unlocked: true));
     await pumpEpisode(6);
