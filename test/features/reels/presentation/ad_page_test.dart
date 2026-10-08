@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:rusk_media/core/ads/ad_preloader.dart';
+import 'package:rusk_media/core/constants/app_strings.dart';
 import 'package:rusk_media/features/reels/presentation/bloc/reels_bloc.dart';
 import 'package:rusk_media/features/reels/presentation/widgets/ad_page.dart';
 import 'package:rusk_media/shared/widgets/connection_state/connection_state_view.dart';
@@ -158,6 +159,25 @@ void main() {
     expect(loading, findsNothing);
     expect(opacityOf(tester, find.text('Sponsored')), 1);
     expect(tester.hasRunningAnimations, isFalse);
+    await finish(tester);
+  });
+
+  testWidgets('on a short screen the ad gives way, nothing runs off screen',
+      (tester) async {
+    tester.view
+      ..physicalSize = const Size(360, 520)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await pumpAd(tester, focused: 2);
+    made.last.answer();
+    await pumpQuietly(tester);
+    await pumpQuietly(tester);
+
+    final hint = find.text(AppStrings.adSwipeOn);
+    expect(tester.getBottomLeft(hint).dy, lessThanOrEqualTo(520));
+    final ad = tester.getRect(find.byType(AdWidget));
+    expect(ad.bottom, lessThan(tester.getTopLeft(hint).dy));
     await finish(tester);
   });
 

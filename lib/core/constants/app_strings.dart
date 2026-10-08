@@ -35,7 +35,9 @@ abstract final class AppStrings {
   static const String unlocking = 'Unlocking…';
 
   static const String sponsored = 'Sponsored';
-  static const String adSwipeOn = 'Swipe up to continue';
+  static const String adSwipeOn = 'Swipe up to continue the story';
+  static const String adBreakTitle = 'A short break';
+  static const String adCardLabel = 'Ad · Sponsored';
 
   static const String tipsTitle = 'How it works';
   static const String tipPause = 'Tap the screen to pause and resume';

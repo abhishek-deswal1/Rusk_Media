@@ -155,23 +155,11 @@ class _LoadedAdState extends State<_LoadedAd>
             _Enter(
               animation: _chip,
               from: const Offset(0, -0.4),
-              child: const _SponsoredChip(),
+              child: const _BreakHeader(),
             ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              // the size range google gives for the medium template
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minWidth: 320,
-                  minHeight: 320,
-                  maxWidth: 400,
-                  maxHeight: 400,
-                ),
-                child: AdWidget(ad: widget.ad),
-              ),
-            ),
-            const Spacer(),
+            // the card takes whatever height is left, so on a short screen
+            // the ad shrinks instead of pushing past the safe area
+            Expanded(child: Center(child: _AdCard(ad: widget.ad))),
             _Enter(
               animation: _hint,
               from: const Offset(0, 0.4),
@@ -203,6 +191,78 @@ class _Enter extends StatelessWidget {
       child: SlideTransition(
         position: Tween(begin: from, end: Offset.zero).animate(animation),
         child: child,
+      ),
+    );
+  }
+}
+
+class _BreakHeader extends StatelessWidget {
+  const _BreakHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: CustomText(
+              AppStrings.adBreakTitle,
+              semanticLocator: 'ad_break_title',
+              textStyle: AppTextStyles.heading,
+            ),
+          ),
+          const _SponsoredChip(),
+        ],
+      ),
+    );
+  }
+}
+
+// an outlined frame around google's template so the break reads as part of
+// the feed. the frame is plain decoration: the native view inside is never
+// clipped, faded or moved
+class _AdCard extends StatelessWidget {
+  const _AdCard({required this.ad});
+
+  final NativeAd ad;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.inkRaised,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.lime.withOpacity(0.35)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 10, bottom: 10),
+            child: CustomText(
+              AppStrings.adCardLabel,
+              semanticLocator: 'ad_card_label',
+              textStyle: AppTextStyles.count.copyWith(color: AppColors.lime),
+            ),
+          ),
+          // the size range google gives for the medium template, within
+          // whatever room the screen has
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minWidth: 320,
+                minHeight: 320,
+                maxWidth: 400,
+                maxHeight: 400,
+              ),
+              child: AdWidget(ad: ad),
+            ),
+          ),
+        ],
       ),
     );
   }
