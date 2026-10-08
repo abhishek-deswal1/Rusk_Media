@@ -5,6 +5,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:rusk_media/core/communication/response_classes/use_case_response.dart';
+import 'package:rusk_media/features/reels/domain/entities/feed_item.dart';
 import 'package:rusk_media/features/reels/domain/entities/reel.dart';
 import 'package:rusk_media/features/reels/domain/entities/reel_batch.dart';
 import 'package:rusk_media/features/reels/domain/usecases/load_reels.dart';
@@ -422,7 +423,7 @@ void main() {
       expect: () => [
         ready(['a', 'b']).copyWith(focusedPage: 1),
         ready(['a', 'b']).copyWith(focusedPage: 1, fetchingMore: true),
-        ready(['a', 'b']).copyWith(focusedPage: 1),
+        ready(['a', 'b']).copyWith(focusedPage: 1, tail: FeedTail.offline),
       ],
     );
 
@@ -450,6 +451,102 @@ void main() {
       expect(done.isValidPage(4), isTrue);
       expect(done.isValidPage(5), isFalse);
     });
+
+    test('while more is due the feed ends in a last page, never just stops',
+        () {
+      // a b c then the last page; no ad slot after the last loaded episode
+      final due = ready(['a', 'b', 'c']);
+      expect(
+        [for (final i in due.items) i.key],
+        ['ep_a', 'ep_b', 'ep_c', 'more'],
+      );
+      expect(due.copyWith(focusedPage: 3).onTail, isTrue);
+      expect(due.copyWith(focusedPage: 3).focusedEpisode, isNull);
+      expect(ready(['a', 'b', 'c'], more: false).items, hasLength(3));
+    });
+
+    blocTest<ReelsBloc, ReelsState>(
+      'offline at the end: the last page shows it, and quiet retries keep it',
+      setUp: () => when(() => load(cursor: 3))
+          .thenAnswer((_) async => const UseCaseConnectionError()),
+      build: build,
+      seed: () => ready(['a', 'b', 'c']).copyWith(focusedPage: 2),
+      act: (bloc) async {
+        bloc.add(const ReelFocused(3));
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      },
+      verify: (bloc) {
+        expect(bloc.state.focusedPage, 3);
+        expect(bloc.state.tail, FeedTail.offline);
+        // the quiet retries ran without ever showing loading again
+        verify(() => load(cursor: 3)).called(greaterThan(1));
+      },
+    );
+
+    blocTest<ReelsBloc, ReelsState>(
+      'the internet coming back turns the last page into what comes next',
+      setUp: () {
+        var calls = 0;
+        when(() => load(cursor: 3)).thenAnswer(
+          (_) async => calls++ == 0
+              ? const UseCaseConnectionError()
+              : _batch(['d', 'e'], more: false, from: 3),
+        );
+      },
+      build: build,
+      seed: () => ready(['a', 'b', 'c']).copyWith(focusedPage: 3),
+      act: (bloc) async {
+        bloc.add(const ReelFocused(3));
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      },
+      verify: (bloc) {
+        final s = bloc.state;
+        // a b c AD d e: the page the viewer is on is now the ad break
+        expect([for (final i in s.items) i.key].last, 'ep_e');
+        expect(s.items[s.focusedPage], const AdSlotItem('slot_1'));
+        expect(s.tail, FeedTail.loading);
+        expect(s.canLoadMore, isFalse);
+      },
+    );
+
+    blocTest<ReelsBloc, ReelsState>(
+      'a retry tap shows loading for a moment, then the answer',
+      setUp: () => when(() => load(cursor: 3))
+          .thenAnswer((_) async => const UseCaseConnectionError()),
+      build: () => build(retryShownFor: const Duration(milliseconds: 40)),
+      seed: () => ready(['a', 'b', 'c'])
+          .copyWith(focusedPage: 3, tail: FeedTail.offline),
+      act: (bloc) async {
+        bloc.add(const ReelsMoreRequested());
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(bloc.state.tail, FeedTail.loading);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+      },
+      verify: (bloc) => expect(bloc.state.tail, FeedTail.offline),
+    );
+
+    blocTest<ReelsBloc, ReelsState>(
+      'a retry tap with nothing failed does nothing',
+      build: build,
+      seed: () => ready(['a', 'b', 'c']).copyWith(focusedPage: 3),
+      act: (bloc) => bloc.add(const ReelsMoreRequested()),
+      expect: () => <ReelsState>[],
+    );
+
+    blocTest<ReelsBloc, ReelsState>(
+      'an empty last batch takes the last page away without stranding anyone',
+      setUp: () => when(() => load(cursor: 3)).thenAnswer(
+        (_) async => _batch([], more: false, from: 3),
+      ),
+      build: build,
+      seed: () => ready(['a', 'b', 'c']).copyWith(focusedPage: 2),
+      act: (bloc) => bloc.add(const ReelFocused(3)),
+      verify: (bloc) {
+        expect(bloc.state.items, hasLength(3));
+        expect(bloc.state.focusedPage, 2);
+        expect(bloc.state.pageMove?.page, 2);
+      },
+    );
 
     blocTest<ReelsBloc, ReelsState>(
       'ignores a page that is not there yet',
@@ -491,7 +588,7 @@ void main() {
     List<String> keys(ReelsState s) => [for (final i in s.items) i.key];
 
     test('the feed reads E1 E2 E3 AD E4 E5 E6 AD E7', () {
-      expect(keys(ready(episodes)), [
+      expect(keys(ready(episodes, more: false)), [
         'ep_e1', 'ep_e2', 'ep_e3', 'ad_slot_1', //
         'ep_e4', 'ep_e5', 'ep_e6', 'ad_slot_2', 'ep_e7',
       ]);

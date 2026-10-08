@@ -25,6 +25,18 @@ final class EpisodeItem extends FeedItem {
   List<Object?> get props => [reel, index];
 }
 
+// the page past the last loaded episode while the catalogue has more; it
+// shows the next batch loading, or why it can't
+final class MoreItem extends FeedItem {
+  const MoreItem();
+
+  @override
+  String get key => 'more';
+
+  @override
+  List<Object?> get props => [];
+}
+
 final class AdSlotItem extends FeedItem {
   const AdSlotItem(this.slotId);
 

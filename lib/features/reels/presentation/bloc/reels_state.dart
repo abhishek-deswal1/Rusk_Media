@@ -2,6 +2,9 @@ part of 'reels_bloc.dart';
 
 enum ReelsPhase { idle, fetching, ready, offline, broken }
 
+// what the last page shows while the next batch is due
+enum FeedTail { loading, offline, broken }
+
 // a one-off instruction for the page controller; [id] keeps two identical
 // moves apart
 class PageMove extends Equatable {
@@ -26,6 +29,7 @@ class ReelsState extends BaseState {
     this.focusedPage = 0,
     this.removedSlots = const {},
     this.pageMove,
+    this.tail = FeedTail.loading,
   });
 
   static const FeedComposer composer = FeedComposer();
@@ -44,8 +48,13 @@ class ReelsState extends BaseState {
   final Set<String> removedSlots;
   final PageMove? pageMove;
 
+  // a failed check stays on screen through the quiet retries behind it, so
+  // the last page doesn't flicker; only a success or a tap clears it
+  final FeedTail tail;
+
   // derived, so paging and slot removal can never disagree about the feed
-  List<FeedItem> get items => composer.compose(reels, removed: removedSlots);
+  List<FeedItem> get items =>
+      composer.compose(reels, removed: removedSlots, more: canLoadMore);
 
   bool isValidPage(int page) => page >= 0 && page < items.length;
 
@@ -54,13 +63,19 @@ class ReelsState extends BaseState {
     return focusedPage < all.length && all[focusedPage] is AdSlotItem;
   }
 
-  // catalogue index of the episode on screen, or null on an ad
+  bool get onTail {
+    final all = items;
+    return focusedPage < all.length && all[focusedPage] is MoreItem;
+  }
+
+  // catalogue index of the episode on screen, or null on an ad or the last
+  // page
   int? get focusedEpisode {
     final all = items;
     if (focusedPage >= all.length) return null;
     return switch (all[focusedPage]) {
       EpisodeItem(:final index) => index,
-      AdSlotItem() => null,
+      AdSlotItem() || MoreItem() => null,
     };
   }
 
@@ -74,6 +89,7 @@ class ReelsState extends BaseState {
     int? focusedPage,
     Set<String>? removedSlots,
     PageMove? pageMove,
+    FeedTail? tail,
   }) {
     return ReelsState(
       phase: phase ?? this.phase,
@@ -85,6 +101,7 @@ class ReelsState extends BaseState {
       focusedPage: focusedPage ?? this.focusedPage,
       removedSlots: removedSlots ?? this.removedSlots,
       pageMove: pageMove ?? this.pageMove,
+      tail: tail ?? this.tail,
     );
   }
 
@@ -99,5 +116,6 @@ class ReelsState extends BaseState {
         focusedPage,
         removedSlots,
         pageMove,
+        tail,
       ];
 }

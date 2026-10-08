@@ -32,6 +32,7 @@ class ReelsBloc extends BaseBloc<ReelsEvent, ReelsState> {
     on<ReelsReloadRequested>(_reloadRequested);
     on<_ReconnectTick>(_reconnectTick);
     on<_LoadMoreRetry>(_loadMoreRetry);
+    on<ReelsMoreRequested>(_moreRequested);
     on<ReelFocused>(_focused);
     on<AdSlotFailed>(_adSlotFailed);
     on<FeedScrollChanged>(_scrollChanged);
@@ -134,16 +135,40 @@ class ReelsBloc extends BaseBloc<ReelsEvent, ReelsState> {
     final result = await _loadUsable(state.cursor);
     if (result is UseCaseSuccessResponse<ReelBatch>) {
       final batch = result.data;
+      _retryShown = null;
       emit(
         state.copyWith(
           reels: [...state.reels, ...batch.reels],
           canLoadMore: batch.hasMore,
           cursor: batch.cursor,
           fetchingMore: false,
+          tail: FeedTail.loading,
         ),
       );
+      // an empty last batch takes the last page away; don't leave the
+      // viewer on a page that is gone
+      final last = state.items.length - 1;
+      if (state.focusedPage > last) {
+        emit(
+          state.copyWith(
+            focusedPage: last,
+            pageMove: _move(last, animate: true),
+          ),
+        );
+      }
     } else {
-      emit(state.copyWith(fetchingMore: false));
+      final shown = _retryShown;
+      if (shown != null) await shown.future;
+      _retryShown = null;
+      _retryHold = null;
+      emit(
+        state.copyWith(
+          fetchingMore: false,
+          tail: result is UseCaseConnectionError
+              ? FeedTail.offline
+              : FeedTail.broken,
+        ),
+      );
       // with a single reel there is no swipe left to ask again, so retry on
       // a timer; it only loads if the viewer is still near the end by then
       _scheduleLoadMoreRetry();
@@ -154,6 +179,24 @@ class ReelsBloc extends BaseBloc<ReelsEvent, ReelsState> {
     _LoadMoreRetry event,
     Emitter<ReelsState> emit,
   ) async {
+    _retryMore = null;
+    await _loadMoreIfNear(state.focusedPage, emit);
+  }
+
+  Future<void> _moreRequested(
+    ReelsMoreRequested event,
+    Emitter<ReelsState> emit,
+  ) async {
+    if (state.tail == FeedTail.loading) return;
+    emit(state.copyWith(tail: FeedTail.loading));
+    // an offline check fails at once; keep the loading tv up long enough to
+    // read, like the retry on the first screen
+    final shown = Completer<void>();
+    _retryShown = shown;
+    _retryHold = Timer(retryShownFor, shown.complete);
+    // a quiet retry already on its way answers this tap too
+    if (state.fetchingMore) return;
+    _retryMore?.cancel();
     _retryMore = null;
     await _loadMoreIfNear(state.focusedPage, emit);
   }

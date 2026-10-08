@@ -40,6 +40,19 @@ void main() {
     expect(holds(feed.copyWith(focusedPage: 3)), isTrue);
   });
 
+  test('the last page holds every video and leaves the players where they are',
+      () {
+    // E1 E2 E3 then the last page while more is due
+    final due = ReelsState(
+      phase: ReelsPhase.ready,
+      reels: feed.reels.take(3).toList(),
+      focusedPage: 3,
+    );
+    expect(due.onTail, isTrue);
+    expect(holds(due), isTrue);
+    expect(ReelsScreen.poolWindow(due, locked), isNull);
+  });
+
   test('the tips hold every video once there is a reel under them', () {
     expect(holds(feed.copyWith(focusedPage: 6), locked, firstRun), isTrue);
     expect(holds(const ReelsState(), locked, firstRun), isFalse);

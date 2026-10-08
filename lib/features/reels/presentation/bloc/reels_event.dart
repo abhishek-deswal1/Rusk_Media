@@ -12,6 +12,11 @@ final class ReelsReloadRequested extends ReelsEvent {
   const ReelsReloadRequested();
 }
 
+// the retry on the last page, when the next batch couldn't be fetched
+final class ReelsMoreRequested extends ReelsEvent {
+  const ReelsMoreRequested();
+}
+
 final class ReelFocused extends ReelsEvent {
   const ReelFocused(this.page);
 

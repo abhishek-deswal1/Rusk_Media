@@ -10,8 +10,13 @@ class FeedComposer {
 
   // for seven episodes: E1 E2 E3 AD E4 E5 E6 AD E7. no slot after the last
   // loaded episode, so the next page can only grow the feed ahead of the
-  // viewer
-  List<FeedItem> compose(List<Reel> reels, {Set<String> removed = const {}}) {
+  // viewer. while [more] is on the way a last page stands in for it, so the
+  // feed never just stops; it becomes whatever the next batch puts there
+  List<FeedItem> compose(
+    List<Reel> reels, {
+    Set<String> removed = const {},
+    bool more = false,
+  }) {
     final items = <FeedItem>[];
     for (var i = 0; i < reels.length; i++) {
       items.add(EpisodeItem(reel: reels[i], index: i));
@@ -21,6 +26,7 @@ class FeedComposer {
         if (!removed.contains(slotId)) items.add(AdSlotItem(slotId));
       }
     }
+    if (more && reels.isNotEmpty) items.add(const MoreItem());
     return List.unmodifiable(items);
   }
 

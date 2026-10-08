@@ -23,7 +23,7 @@ import 'package:rusk_media/shared/widgets/connection_state/connection_state_view
 class ReelsScreen extends BaseMultiBlocProviderWidget<ReelsBloc> {
   const ReelsScreen({super.key});
 
-  // tips, the paywall and an ad page each hold every video
+  // tips, the paywall, an ad page and the last page each hold every video
   @visibleForTesting
   static bool holdsPlayback(
     ReelsState feed,
@@ -33,6 +33,7 @@ class ReelsScreen extends BaseMultiBlocProviderWidget<ReelsBloc> {
     final episode = feed.focusedEpisode;
     return (onboarding.tipsPending && feed.reels.isNotEmpty) ||
         feed.onAd ||
+        feed.onTail ||
         (episode != null && paywall.showsOn(episode));
   }
 
@@ -381,7 +382,9 @@ class _PagerState extends State<_Pager> {
         onNotification: _onScroll,
         child: BlocBuilder<ReelsBloc, ReelsState>(
           buildWhen: (a, b) =>
-              a.reels != b.reels || a.removedSlots != b.removedSlots,
+              a.reels != b.reels ||
+              a.removedSlots != b.removedSlots ||
+              a.canLoadMore != b.canLoadMore,
           builder: (context, s) {
             final items = s.items;
             return PageView.builder(
@@ -416,11 +419,51 @@ class _PagerState extends State<_Pager> {
                     page: page,
                     slotId: item.slotId,
                   ),
+                final MoreItem item => _FeedTail(
+                    key: ValueKey(item.key),
+                    page: page,
+                  ),
               },
             );
           },
         ),
       ),
+    );
+  }
+}
+
+// the page past the last loaded episode: the same loading tv while the next
+// batch is on its way, the offline or error one with a retry when it can't
+// come. it has no gestures, so swiping back always works
+class _FeedTail extends StatelessWidget {
+  const _FeedTail({required this.page, super.key});
+
+  final int page;
+
+  @override
+  Widget build(BuildContext context) {
+    final focused = context.select<ReelsBloc, bool>(
+      (bloc) => bloc.state.focusedPage == page,
+    );
+    final tail = context.select<ReelsBloc, FeedTail>(
+      (bloc) => bloc.state.tail,
+    );
+    void retry() => context.read<ReelsBloc>().add(const ReelsMoreRequested());
+    return TickerMode(
+      // built next door, so only animate once it is the page on screen
+      enabled: focused,
+      child: switch (tail) {
+        FeedTail.loading =>
+          const ConnectionStateView(mode: ConnectionViewMode.loading),
+        FeedTail.offline => ConnectionStateView(
+            mode: ConnectionViewMode.offline,
+            onRetry: retry,
+          ),
+        FeedTail.broken => ConnectionStateView(
+            mode: ConnectionViewMode.error,
+            onRetry: retry,
+          ),
+      },
     );
   }
 }

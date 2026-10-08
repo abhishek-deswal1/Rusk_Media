@@ -24,6 +24,16 @@ void main() {
     ]);
   });
 
+  test('while more is due the feed ends in a last page, not an ad', () {
+    // six episodes loaded, more on the way: no slot_2 yet, a last page instead
+    final due = composer.compose(seven.take(6).toList(), more: true);
+    expect(keys(due).skip(6), ['ep_e6', 'more']);
+    // the catalogue is done: nothing after the last episode
+    expect(keys(composer.compose(seven)).last, 'ep_e7');
+    // nothing loaded yet: no feed, so no last page either
+    expect(composer.compose(const [], more: true), isEmpty);
+  });
+
   test('ad slots never change episode numbering', () {
     final episodes = feed.whereType<EpisodeItem>();
     expect([for (final e in episodes) e.index], [0, 1, 2, 3, 4, 5, 6]);
