@@ -36,8 +36,12 @@ That is Google's debug overlay, not ours.
   plays, the neighbours sit ready, the two after that are quietly fetched to disk.
 - **Gestures.** Tap pauses. Double-tap likes (heart burst at the finger). Hold and slide
   up/down for volume, hold and slide sideways to scrub. The bottom line is also a seek
-  bar.
-- **Ads.** Native ads from GAM test units, requested three pages ahead. A slot that
+  bar. On Android the volume gesture moves the phone's own media volume, the same level
+  the hardware keys change, and the meter follows the keys too. The sound button is a
+  mute for the app only; it never touches the phone's level.
+- **Ads.** Native ads from GAM test units, requested three pages ahead, shown as "a
+  short break" in the story: Google's template inside an outlined card, with a swipe
+  hint underneath. A slot that
   errors, comes back empty or takes more than 8s leaves the feed, and it leaves without
   anything on screen jumping.
 - **Paywall.** Episode 7 is locked. You can see its poster behind a blur, you can't
@@ -99,9 +103,15 @@ Things it does that are easy to miss:
 - `pause()` is never gated on `isPlaying`. ExoPlayer reports "not playing" while it
   waits on audio focus or a buffer, and then resumes on its own. If we trusted that flag
   a reel could keep playing in the background after a phone call.
+- At most two players initialise at once. The focused page never waits; neighbours
+  queue with the reel ahead first. An initialise can't be called off once it starts, so
+  the saving comes from never starting the ones a fast flick has already left behind,
+  and from a page that leaves the window giving its turn up straight away.
 - `CachedVideoControllerFactory` plays from disk when the file is there, otherwise
   streams and downloads a copy once the stream is up, so the first frame never waits on
-  a full download.
+  a full download. Warm clips download one at a time and each new window replaces the
+  ones still waiting; the cache manager has no cancel, so that is how a flick avoids
+  fetching clips nobody will reach.
 
 Budget: the focused reel and one either side are live (three decoders), the next two are
 disk-only. Those two numbers sit at the top of `ReelsScreen` and are the only knob.
@@ -143,7 +153,17 @@ composed feed). `PaywallLockPhysics` stops the scroll at that page with a damped
 and reads the locked page from a `ValueNotifier` rather than a constructor argument,
 because `Scrollable` keeps the first physics it was given and the locked page moves
 when an ad before it is dropped. The locked episode is fetched to disk but never gets a
-player, so unlocking plays instantly; nothing past it is fetched at all.
+player, so unlocking plays instantly; nothing past it is fetched at all. The paywall
+layer stays mounted on that page while it scrolls, so swiping away plays the leave
+(blur and card ease out) instead of cutting off at the half-page point.
+
+### Phone volume
+
+`SystemVolumeService` talks to `MainActivity` over a `system_volume` channel: read and set
+the media stream, plus a stream of changes from the hardware keys. The pool only switches
+to it once the first read answers, so iOS, tests and fixed-volume devices keep the app's
+own volume. A set replies with the level the phone actually took (it has its own 15-ish
+steps, and Do Not Disturb can refuse), and that is what the meter starts from next time.
 
 ### Edge-to-edge
 
@@ -180,11 +200,14 @@ Things that are deliberately not real yet:
   something to hold back.
 - **Ad units.** Google's sample Ad Manager units and the sample app id in the manifest.
   Never a production unit in this repo.
-- **Purchase.** "Unlock Episode" at ₹49 is a 600ms timer. When a real purchase comes in,
+- **Purchase.** The brief asks for a simulated unlock, so "Unlock Episode" at ₹49 is a
+  600ms timer. When a real purchase comes in,
   its result must land in `PaywallBloc`, not in the widget, so a swipe mid-purchase
   can't lose it.
-- **Release config.** `applicationId` is still `com.example.rusk_media`, the release
-  build type signs with the debug key, and `targetSdk` follows Flutter's default (34).
+- **Release config.** `applicationId` is still `com.example.rusk_media` and `targetSdk`
+  follows Flutter's default (34). Release builds sign with the key named in
+  `android/key.properties` (not in git); without that file they fall back to the debug
+  key.
   All three change together before anything ships.
 
 ## Testing
@@ -194,7 +217,7 @@ fvm flutter test                          # everything
 fvm flutter test test/features/reels/     # one area
 ```
 
-189 tests at the time of writing. The habit: a bug fix ships with a test that fails on
+210 tests at the time of writing. The habit: a bug fix ships with a test that fails on
 the old code, and we actually run it against the old code first. Pure policies and
 blocs are unit tested; widgets are tested where the test is cheap and guards something
 real (rebuild scope, gesture arena, the paywall never mounting a player).
@@ -205,10 +228,9 @@ paths are tested without a device.
 
 ## Known rough edges
 
-- Warm prefetch downloads whole files and has no cancel, so a very fast flick on a slow
-  connection fetches clips you never reach.
-- Swiping back off the locked episode unmounts the paywall at the half-page point; the
-  leave animation never plays.
+- A download or player initialise that has already started runs to the end even if the
+  viewer has moved on; it is thrown away when it lands. Only what hasn't started yet is
+  dropped.
 - The progress bar steps at the plugin's position poll rate rather than interpolating.
 - `lib/core/base/base_widget.dart` has no subclass right now; it is the single-bloc
   counterpart of the multi-bloc base and will be used by the next plain screen.
