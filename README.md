@@ -50,7 +50,11 @@ That is Google's debug overlay, not ours.
 - **First run.** A tips sheet on the first launch, then a three-step guide (volume,
   timeline, swipe) acted out by a hand. Both are stored so they show once.
 - **Offline.** Loading, no-internet, error and empty states share one view. Retry polls
-  every 3s while offline and recovers by itself.
+  every 3s while offline and recovers by itself. Clips already on disk keep playing with
+  no network. If the next batch can't be fetched, the feed doesn't just stop: the page
+  after the last loaded episode shows the same offline screen with a retry, and turns
+  into the next page of the story once the connection is back. After the last episode
+  there is no such page.
 
 ## How it is put together
 
@@ -217,7 +221,7 @@ fvm flutter test                          # everything
 fvm flutter test test/features/reels/     # one area
 ```
 
-210 tests at the time of writing. The habit: a bug fix ships with a test that fails on
+218 tests at the time of writing. The habit: a bug fix ships with a test that fails on
 the old code, and we actually run it against the old code first. Pure policies and
 blocs are unit tested; widgets are tested where the test is cheap and guards something
 real (rebuild scope, gesture arena, the paywall never mounting a player).
